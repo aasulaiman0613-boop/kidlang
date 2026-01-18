@@ -1,15 +1,30 @@
 KidLang
 
-A small programming language made for learning how to think like a programmer
+KidLang is a small programming language built to teach how programming actually works.
 
-What is KidLang
+It is designed for learning logic, structure, and problem solving without overwhelming syntax or hidden behavior.
 
-KidLang is a beginner friendly programming language designed to teach logic, structure, and problem solving without overwhelming syntax.
+KidLang does not try to replace Python.
+It prepares you for Python by teaching the foundations clearly and explicitly.
 
-It was built to feel simple like Python and Luau, but stricter and clearer so learners understand what is really happening.
+Why KidLang exists
 
-KidLang is not meant to replace Python.
-It is meant to teach the foundations so moving to Python later feels natural.
+Many beginners struggle not because programming is hard, but because too much happens behind the scenes.
+
+KidLang removes that confusion.
+
+KidLang is:
+
+Explicit instead of magical
+
+Strict instead of forgiving
+
+Small instead of complex
+
+Educational instead of clever
+
+Nothing happens unless you write it.
+Mistakes are explained, not punished.
 
 Who KidLang is for
 
@@ -17,12 +32,11 @@ KidLang is designed for:
 
 Children learning programming for the first time
 
-Teenagers who want to understand logic, not just copy code
+Teenagers who want to understand logic 
 
-Adults who want a clean and simple introduction
+Adults who want a clean introduction to programming
 
-Teachers who want a safe, controlled learning environment
-
+Teachers who need a safe and controlled learning environment
 
 What you can do with KidLang
 
@@ -36,48 +50,62 @@ Store values in variables
 
 Do math
 
-Make decisions with if / else
+Make decisions with if and else
 
 Repeat actions with loops
 
-See step by step execution
+See programs run step by step
 
-Learn how programs actually run
+Understand how programs actually execute
+
+Quick start
+Using the KidLang IDE (Windows)
+
+Download the latest release
+
+Open the dist folder
+
+Double click the KidLang IDE executable
+
+Write your code and press Run
+
+Output appears in the black output panel
+
+If your program asks for input, a small input box will appear.
+
+No installation is required.
+
+Using the command line
+python kidlang.py example.kid
+
+Example program
+let name = ask("What is your name? ")
+say("Hello " + name)
+
+let x = 1
+while x <= 5 do
+  say(x)
+  x = x + 1
+end
 
 How KidLang works (simple explanation)
 
-Every KidLang program goes through these steps:
+Every KidLang program follows these steps:
 
 Your code is read line by line
 
-The language understands each word and symbol
+Each word and symbol is understood
 
-It builds a structure of what you meant
+A structure is built from your code
 
-It runs that structure step by step
+That structure is executed step by step
 
 This is how real programming languages work internally.
 
-Running KidLang
-
-If you are using the KidLang IDE app:
-
-Open the kidlang file
-
-go to dist
-
-and double click on the exe or pin it to taskbar
-
-once the app is opened write your code and press run and see the output in the black box
-
-If your program asks a question, a small input box will appear.
-
-You do not need to install anything else.
-
-The KidLang language guide
+Language basics
 Comments
 
-Comments are ignored by the language. They are for humans.
+Comments are ignored by the language and are only for humans.
 
 # This is a comment
 -- This is also a comment
@@ -100,18 +128,13 @@ Variables
 Create a variable using let.
 
 let score = 0
-
-
-Update an existing variable like this:
-
 score = score + 1
 
 
-Important rule:
 You must create a variable before using it.
-If you forget, KidLang explains how to fix it.
+If you forget, KidLang explains how to fix the mistake.
 
-Asking the user for input
+User input
 
 Use ask to get text from the user.
 
@@ -123,17 +146,9 @@ ask always returns text.
 
 Numbers and math
 
-Supported math operators:
+KidLang supports standard math operators:
 
-+ add
-
-- subtract
-
-* multiply
-
-/ divide
-
-Examples:
++ - * /
 
 let x = 2 + 3 * 4
 say(x)
@@ -149,26 +164,15 @@ Parentheses work as expected.
 let y = (2 + 3) * 4
 say(y)
 
-Strings
-
-Strings are text inside quotes.
-
-say("Hello world")
-
-
-You can combine text and numbers using +.
-
-let age = 10
-say("Age: " + age)
-
 True, false, and null
 
-KidLang supports:
+KidLang includes:
 
 true
-false
-null
 
+false
+
+null
 
 These are used in conditions and logic.
 
@@ -193,7 +197,7 @@ end always closes the block
 
 While loops
 
-Use while when something should repeat until a condition becomes false.
+Use while to repeat actions until a condition becomes false.
 
 let x = 1
 
@@ -203,11 +207,9 @@ while x <= 5 do
 end
 
 
-Be careful to change the variable inside the loop so it can stop.
+Make sure the condition changes inside the loop so it can stop.
 
-KidLang protects against infinite loops.
-
-Repeat loops (very beginner friendly)
+Repeat loops (beginner friendly)
 
 Use repeat when you know how many times something should run.
 
@@ -220,21 +222,21 @@ This is one of the easiest ways to learn loops.
 
 Step mode (learning feature)
 
-In the IDE, you can enable Step mode.
+The KidLang IDE includes Step mode.
 
-When Step mode is on:
+When Step mode is enabled:
 
 The program pauses before each statement
 
-You can see what is about to run
+You see what will run next
 
-You can see current variable values
+You see current variable values
 
-This is extremely useful for learning how programs execute.
+This helps learners understand execution order and logic.
 
 Errors that teach
 
-KidLang errors are written to help you learn, not to scare you.
+KidLang error messages are written to help you learn.
 
 Example:
 
@@ -258,7 +260,7 @@ Modify your computer
 
 Run system commands
 
-This makes it safe for learning.
+This makes it safe for learning and classroom use.
 
 What KidLang does not include (yet)
 
@@ -272,37 +274,7 @@ Lists or dictionaries
 
 Imports or modules
 
-This keeps the language focused on fundamentals.
-
-Why KidLang is different
-
-KidLang is:
-
-Explicit instead of magical
-
-Strict instead of forgiving
-
-Small instead of complex
-
-Educational instead of clever
-
-It is designed to teach how programming really works.
-
-Folder structure (for developers)
-
-If you explore the source code:
-
-kidlang/
-  kid_lexer.py
-  parser.py
-  ast_nodes.py
-  interpreter.py
-  kidlang.py
-  kidlang_ide.py
-  tests/
-
-
-Each file has a clear responsibility.
+This keeps the focus on fundamentals.
 
 Learning path suggestion
 
@@ -310,7 +282,7 @@ Learn say and let
 
 Learn math
 
-Learn if / else
+Learn if and else
 
 Learn repeat
 
@@ -319,12 +291,3 @@ Learn while
 Use Step mode to understand execution
 
 After this, Python will feel much easier.
-
-Final note
-
-KidLang was built to remove fear from programming.
-
-If something feels confusing, slow down, read the code, and step through it.
-
-Programming is not about typing fast.
-It is about thinking clearly.
