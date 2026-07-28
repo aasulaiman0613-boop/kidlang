@@ -1,24 +1,28 @@
 # Discord Username: collector668 | Roblox Username: CollectorXVIII
+"""Lexer for a small educational programming language."""
 
-# Token is the data structure used to represent one recognised piece of source
-# code. Each token records its category, original value, line and column.
 from tokens import Token
 
 
-# Reserved words are recognised separately from ordinary identifiers.
-# All entries in this set are emitted with the shared token kind "KW".
-# The parser later checks the keyword's lexeme to distinguish their meanings.
 KEYWORDS = {
-    "let","if","then","else","end","while","do","fun","return",
-    "true","false","null","and","or","not",
-    "repeat","times",
+    "let",
+    "if",
+    "then",
+    "else",
+    "end",
+    "while",
+    "do",
+    "true",
+    "false",
+    "null",
+    "and",
+    "or",
+    "not",
+    "repeat",
+    "times",
 }
 
-
-# SINGLE maps one-character symbols to their corresponding token kinds.
-# Dictionary lookup allows the lexer to recognise these symbols without using
-# a separate conditional branch for every operator or punctuation character.
-SINGLE = {
+SINGLE_CHAR_TOKENS = {
     "(": "LPAREN",
     ")": "RPAREN",
     ",": "COMMA",
@@ -27,266 +31,182 @@ SINGLE = {
     "*": "STAR",
     "/": "SLASH",
     "=": "EQUAL",
+    "<": "LT",
+    ">": "GT",
 }
 
-
-# DOUBLE contains operators that consist of exactly two characters.
-# These must be checked before the one-character operators so that, for
-# example, "==" is not incorrectly emitted as two separate EQUAL tokens.
-DOUBLE = {
+DOUBLE_CHAR_TOKENS = {
     "==": "EQEQ",
     "!=": "NOTEQ",
     "<=": "LTE",
     ">=": "GTE",
 }
 
-
-# The remaining single-character comparison operators are stored separately.
-# They are tested after DOUBLE so "<=" and ">=" retain their intended meaning.
-SINGLE2 = {
-    "<": "LT",
-    ">": "GT",
+ESCAPES = {
+    "n": "\n",
+    "t": "\t",
+    '"': '"',
+    "\\": "\\",
 }
 
 
-def lex(src: str):
+def lex(src: str) -> list[Token]:
     """
-    Convert source-code text into an ordered sequence of Token objects.
+    Convert source text into tokens while preserving source positions.
 
-    The lexer scans the source from left to right while tracking the current
-    character index, line number and column number. Each recognised language
-    element is converted into a token for the parser. Whitespace and comments
-    are ignored, while newline characters are retained because this language
-    uses them to separate statements and begin blocks.
+    Newlines are emitted because the parser uses them to separate statements
+    and block headers. Spaces and comments are ignored.
     """
-
-    # Tokens are appended in source order and returned after the scan finishes.
-    tokens = []
-
-    # `i` is the absolute character index within the complete source string.
+    tokens: list[Token] = []
     i = 0
-
-    # Source positions begin at line 1, column 1 for readable diagnostics.
     line = 1
     col = 1
 
-    def push(kind, lexeme, ln, cl):
-        """
-        Append a token using its type, value and starting source position.
+    def push(kind: str, lexeme: str, token_line: int, token_col: int) -> None:
+        tokens.append(Token(kind, lexeme, token_line, token_col))
 
-        The starting line and column are passed explicitly because scanning a
-        multi-character token changes the current lexer position before the
-        completed token is appended.
-        """
-        tokens.append(Token(kind, lexeme, ln, cl))
-
-    # Continue scanning until every character in the source has been processed.
     while i < len(src):
-        # Read the current source character without advancing the lexer.
         ch = src[i]
 
-        # Spaces, tabs and carriage returns have no syntactic meaning in this
-        # language. They are skipped while their column width is still counted.
+        # Horizontal whitespace has no syntactic meaning.
         if ch in " \t\r":
             i += 1
             col += 1
             continue
 
-        # Newlines are significant because the parser expects them between
-        # statements and after block-opening keywords such as `then` and `do`.
+        # Newlines remain visible to the parser.
         if ch == "\n":
             push("NEWLINE", "\n", line, col)
             i += 1
-
-            # Entering a new line increments the line number and resets the
-            # column position to the first character.
             line += 1
             col = 1
             continue
 
-        # A hash character begins a single-line comment. Every character until
-        # the following newline is ignored. The newline itself is deliberately
-        # left unconsumed so the normal newline branch can emit a NEWLINE token.
+        # The language accepts both # comments and -- comments.
         if ch == "#":
             while i < len(src) and src[i] != "\n":
                 i += 1
+                col += 1
             continue
 
-        # Two hyphens provide an alternative single-line comment syntax.
-        # Checking the next character ensures an individual minus symbol still
-        # remains available as an arithmetic or unary operator.
-        if ch == "-" and i + 1 < len(src) and src[i+1] == "-":
+        if ch == "-" and i + 1 < len(src) and src[i + 1] == "-":
             i += 2
-
-            # As with hash comments, scanning stops before the newline so that
-            # statement separation remains visible to the parser.
+            col += 2
             while i < len(src) and src[i] != "\n":
                 i += 1
+                col += 1
             continue
 
-        # Two-character operators are checked before single-character symbols.
-        # This applies maximal matching: the longest valid operator beginning at
-        # the current position is selected.
+        # Longest-match handling prevents <= from becoming LT + EQUAL.
         if i + 1 < len(src):
-            two = src[i:i+2]
-
-            if two in DOUBLE:
-                push(DOUBLE[two], two, line, col)
+            pair = src[i : i + 2]
+            if pair in DOUBLE_CHAR_TOKENS:
+                push(DOUBLE_CHAR_TOKENS[pair], pair, line, col)
                 i += 2
                 col += 2
                 continue
 
-        # Recognise punctuation and arithmetic operators containing one
-        # character. The dictionary supplies the correct token kind.
-        if ch in SINGLE:
-            push(SINGLE[ch], ch, line, col)
+        if ch in SINGLE_CHAR_TOKENS:
+            push(SINGLE_CHAR_TOKENS[ch], ch, line, col)
             i += 1
             col += 1
             continue
 
-        # Recognise the remaining one-character comparison operators.
-        # Their two-character forms have already been handled above.
-        if ch in SINGLE2:
-            push(SINGLE2[ch], ch, line, col)
-            i += 1
-            col += 1
-            continue
-
-        # A double quote begins a string literal.
         if ch == '"':
-            # Preserve the opening quote's position for both the final token and
-            # any unterminated-string error message.
-            ln, cl = line, col
-
-            # Consume the opening quotation mark.
+            start_line = line
+            start_col = col
             i += 1
             col += 1
+            chars: list[str] = []
 
-            # Decoded string characters are collected here. The stored token
-            # value excludes the surrounding quotation marks.
-            out = []
-
-            # Continue until a closing quote is encountered or input ends.
             while i < len(src) and src[i] != '"':
-                # A backslash introduces an escape sequence when another
-                # character is available after it.
-                if src[i] == "\\" and i + 1 < len(src):
-                    nxt = src[i+1]
+                if src[i] == "\n":
+                    raise SyntaxError(
+                        f"Unterminated string at {start_line}:{start_col}"
+                    )
 
-                    # The two-character sequence \n becomes an actual newline
-                    # character within the stored string value.
-                    if nxt == "n":
-                        out.append("\n")
-                        i += 2
-                        col += 2
-                        continue
+                if src[i] == "\\":
+                    if i + 1 >= len(src):
+                        raise SyntaxError(
+                            f"Unterminated string at {start_line}:{start_col}"
+                        )
 
-                    # The two-character sequence \t becomes a tab character.
-                    if nxt == "t":
-                        out.append("\t")
-                        i += 2
-                        col += 2
-                        continue
+                    escaped = src[i + 1]
+                    if escaped not in ESCAPES:
+                        raise SyntaxError(
+                            f"Unknown escape sequence \\{escaped} "
+                            f"at {line}:{col}"
+                        )
 
-                    # Any other escaped character is inserted directly. This
-                    # supports escaped quotes, backslashes and similar values.
-                    out.append(nxt)
+                    chars.append(ESCAPES[escaped])
                     i += 2
                     col += 2
                     continue
 
-                # Raw source newlines are not permitted inside string literals.
-                # The error points to the position of the opening quotation mark.
-                if src[i] == "\n":
-                    raise SyntaxError(f"Unterminated string at {ln}:{cl}")
-
-                # Ordinary characters are appended unchanged.
-                out.append(src[i])
+                chars.append(src[i])
                 i += 1
                 col += 1
 
-            # Reaching the end of the source without a closing quote means the
-            # string was never terminated.
-            if i >= len(src) or src[i] != '"':
-                raise SyntaxError(f"Unterminated string at {ln}:{cl}")
+            if i >= len(src):
+                raise SyntaxError(
+                    f"Unterminated string at {start_line}:{start_col}"
+                )
 
-            # Consume the closing quotation mark.
             i += 1
             col += 1
-
-            # Join all decoded characters and emit one STRING token whose
-            # position refers to the original opening quote.
-            push("STRING", "".join(out), ln, cl)
+            push("STRING", "".join(chars), start_line, start_col)
             continue
 
-        # A digit begins a numeric literal.
         if ch.isdigit():
-            # Save the number's starting position before scanning its contents.
-            ln, cl = line, col
+            start = i
+            start_line = line
+            start_col = col
 
-            # `j` advances independently so the complete token can be sliced
-            # from the original source after its endpoint is known.
-            j = i
+            while i < len(src) and src[i].isdigit():
+                i += 1
+                col += 1
 
-            # Track decimal points so a numeric token contains no more than one.
-            dot = 0
+            if i < len(src) and src[i] == ".":
+                if i + 1 >= len(src) or not src[i + 1].isdigit():
+                    raise SyntaxError(
+                        f"Malformed number at {start_line}:{start_col}"
+                    )
 
-            # Accept consecutive digits and at most one decimal point.
-            while j < len(src) and (src[j].isdigit() or src[j] == "."):
-                if src[j] == ".":
-                    dot += 1
+                i += 1
+                col += 1
 
-                    # A second decimal point ends the current number rather than
-                    # allowing an invalid multi-decimal numeric token.
-                    if dot > 1:
-                        break
+                while i < len(src) and src[i].isdigit():
+                    i += 1
+                    col += 1
 
-                j += 1
+                if i < len(src) and src[i] == ".":
+                    raise SyntaxError(
+                        f"Malformed number at {start_line}:{start_col}"
+                    )
 
-            # Preserve the number as source text. Conversion to int or float is
-            # performed later by the parser when it creates the AST node.
-            lexeme = src[i:j]
-            push("NUMBER", lexeme, ln, cl)
-
-            # Move both the absolute index and column by the number of consumed
-            # characters.
-            col += (j - i)
-            i = j
+            push("NUMBER", src[start:i], start_line, start_col)
             continue
 
-        # Identifiers may begin with an alphabetic character or underscore.
         if ch.isalpha() or ch == "_":
-            # Save the identifier's starting source position.
-            ln, cl = line, col
-            j = i
+            start = i
+            start_line = line
+            start_col = col
 
-            # After the first character, identifiers may contain letters,
-            # digits or underscores.
-            while j < len(src) and (src[j].isalnum() or src[j] == "_"):
-                j += 1
+            while i < len(src) and (
+                src[i].isalnum() or src[i] == "_"
+            ):
+                i += 1
+                col += 1
 
-            # Extract the complete identifier or keyword text.
-            word = src[i:j]
-
-            # Reserved words use the common KW token kind. All other valid names
-            # become IDENT tokens for variables and callable references.
-            if word in KEYWORDS:
-                push("KW", word, ln, cl)
-            else:
-                push("IDENT", word, ln, cl)
-
-            # Advance past the complete word.
-            col += (j - i)
-            i = j
+            word = src[start:i]
+            kind = "KW" if word in KEYWORDS else "IDENT"
+            push(kind, word, start_line, start_col)
             continue
 
-        # Any character that reaches this branch does not belong to the
-        # language's recognised whitespace, comments, literals, identifiers,
-        # punctuation or operators.
-        raise SyntaxError(f"Unexpected character {ch!r} at {line}:{col}")
+        raise SyntaxError(
+            f"Unexpected character {ch!r} at {line}:{col}"
+        )
 
-    # EOF is a sentinel token used by the parser to detect the end of input
-    # safely without repeatedly comparing its index against the token-list size.
+    # EOF is a sentinel that lets the parser stop safely.
     push("EOF", "", line, col)
-
     return tokens
