@@ -1,35 +1,30 @@
 # Discord Username: collector668 | Roblox Username: CollectorXVIII
+"""Recursive-descent parser for the educational language."""
 
 from typing import List
-from tokens import Token
+
 import ast_nodes as A
+from tokens import Token
 
 
-# A dedicated exception type allows parser failures to be distinguished from
-# lexer, runtime, or general Python errors. Parser methods raise this exception
-# whenever the token stream does not conform to the language grammar.
 class ParseError(Exception):
-    pass
+    """Raised when a valid token sequence does not match the grammar."""
 
 
 class Parser:
     """
-    Converts a linear sequence of lexer-generated tokens into an abstract
-    syntax tree (AST).
+    Convert lexer tokens into an abstract syntax tree.
 
-    This parser uses recursive-descent parsing. Each method represents either a
-    grammar rule or a specific operator-precedence level. The parser tracks its
-    current position in the token list through `self.i` and advances only after
-    confirming that the current token is valid for the expected grammar rule.
+    Each expression method represents one precedence level. Lower-precedence
+    methods call higher-precedence methods, which produces the intended tree
+    structure without a separate precedence table.
     """
 
     def __init__(self, tokens: List[Token]):
-        # The complete token stream produced by the lexer. It is expected to
-        # contain a final EOF token so that parser termination can be detected.
-        self.tokens = tokens
+        if not tokens:
+            raise ValueError("Parser requires a token stream containing EOF.")
 
-        # Index of the token currently being examined. Keeping parsing state as
-        # an index avoids removing tokens and preserves the original sequence.
+        self.tokens = tokens
         self.i = 0
 
     def peek(self) -> Token:
@@ -37,161 +32,101 @@ class Parser:
         return self.tokens[self.i]
 
     def prev(self) -> Token:
-        """
-        Return the most recently consumed token.
-
-        This is primarily used after `match` succeeds, allowing the parser to
-        access the matched token's lexeme without storing a separate reference.
-        """
+        """Return the most recently consumed token."""
         return self.tokens[self.i - 1]
 
     def at_end(self) -> bool:
-        """
-        Determine whether parsing has reached the explicit EOF token.
-
-        The lexer supplies EOF as a sentinel token, which prevents parser loops
-        from depending directly on the token-list length.
-        """
+        """Check whether the current token is the EOF sentinel."""
         return self.peek().kind == "EOF"
 
     def advance(self) -> Token:
-        """
-        Consume the current token and return it.
-
-        The index is not moved beyond EOF. After advancing, `prev()` refers to
-        the token that was just consumed.
-        """
+        """Consume and return the current token."""
+        current = self.peek()
         if not self.at_end():
             self.i += 1
-        return self.prev()
+        return current
 
     def check(self, kind: str, lexeme: str | None = None) -> bool:
-        """
-        Check the current token without consuming it.
-
-        `kind` identifies the token category, while the optional `lexeme`
-        permits exact checks for tokens that share a category. For example,
-        language keywords may all use the `KW` kind but have different lexemes.
-        """
+        """Check the current token's kind and optional exact lexeme."""
         if self.at_end():
             return False
 
-        t = self.peek()
-
-        # A token must first match the requested structural category.
-        if t.kind != kind:
+        token = self.peek()
+        if token.kind != kind:
             return False
-
-        # When a lexeme is supplied, both the token kind and exact text must
-        # match. Omitting the lexeme makes this a kind-only comparison.
-        if lexeme is not None and t.lexeme != lexeme:
+        if lexeme is not None and token.lexeme != lexeme:
             return False
-
         return True
 
     def match(self, *kinds: str) -> bool:
-        """
-        Consume the current token when its kind matches any supplied kind.
-
-        Returning a Boolean makes this suitable for grammar alternatives such
-        as PLUS or MINUS without raising an error when neither is present.
-        """
+        """Consume the current token if its kind matches any supplied kind."""
         if self.at_end():
             return False
 
         if self.peek().kind in kinds:
             self.advance()
             return True
-
         return False
 
     def match_kw(self, word: str) -> bool:
-        """
-        Match and consume one exact language keyword.
-
-        Keywords share the `KW` token kind, so both the token kind and its
-        lexeme must be checked to distinguish words such as `if`, `while`,
-        `true`, and `end`.
-        """
+        """Consume one exact keyword."""
         if self.check("KW", word):
             self.advance()
             return True
-
         return False
 
-    def consume(self, kind: str, msg: str, lexeme: str | None = None) -> Token:
-        """
-        Require a specific token and consume it.
-
-        Unlike `match`, this method represents a mandatory grammar element. A
-        ParseError is raised if the current token does not match, including the
-        token's source line, column, kind, and lexeme for precise diagnostics.
-        """
+    def consume(
+        self,
+        kind: str,
+        message: str,
+        lexeme: str | None = None,
+    ) -> Token:
+        """Require a token or raise a source-positioned parse error."""
         if self.check(kind, lexeme):
             return self.advance()
 
-        t = self.peek()
+        token = self.peek()
         raise ParseError(
-            f"{msg} at {t.line}:{t.col} (got {t.kind}:{t.lexeme!r})"
+            f"{message} at {token.line}:{token.col} "
+            f"(got {token.kind}:{token.lexeme!r})"
         )
 
-    def skip_newlines(self):
-        """
-        Consume consecutive newline tokens.
-
-        Newlines separate statements and blocks in this language. This helper
-        permits blank lines between valid statements without creating AST nodes.
-        """
+    def skip_newlines(self) -> None:
+        """Allow blank lines between statements."""
         while self.match("NEWLINE"):
             pass
 
     def parse(self) -> A.Program:
-        """
-        Parse the entire token stream and return the root Program AST node.
-
-        Each top-level statement is parsed independently and stored in source
-        order. Parsing stops only when the EOF token is reached.
-        """
-        stmts = []
-
-        # Leading blank lines are ignored before parsing the first statement.
+        """Parse the complete token stream into a Program node."""
+        statements = []
         self.skip_newlines()
 
         while not self.at_end():
-            stmts.append(self.statement())
+            if self.check("KW") and self.peek().lexeme in {"else", "end"}:
+                token = self.peek()
+                raise ParseError(
+                    f"Unexpected {token.lexeme!r} at "
+                    f"{token.line}:{token.col}"
+                )
 
-            # Newlines following each statement are separators rather than
-            # executable syntax, so they are consumed before the next statement.
+            statements.append(self.statement())
             self.skip_newlines()
 
-        return A.Program(stmts)
+        return A.Program(statements)
 
     def statement(self):
-        """
-        Parse one complete statement.
-
-        Statement type is selected using the leading token. Keyword-led
-        statements are checked first, followed by identifier assignment
-        detection. Any remaining valid input is treated as an expression
-        statement.
-        """
-
-        # Variable declarations use the grammar:
-        # let <identifier> = <expression>
+        """Select and parse one statement from its leading token."""
         if self.match_kw("let"):
             name = self.consume(
                 "IDENT",
-                "Expected variable name"
+                "Expected variable name after 'let'",
             ).lexeme
             self.consume(
                 "EQUAL",
-                "Expected '=' after variable name"
+                "Expected '=' after variable name",
             )
-            expr = self.expression()
-            return A.LetStmt(name, expr)
+            return A.LetStmt(name, self.expression())
 
-        # Control-flow statements delegate to specialised parsing methods
-        # because they contain nested blocks and required closing keywords.
         if self.match_kw("if"):
             return self.if_stmt()
 
@@ -201,343 +136,218 @@ class Parser:
         if self.match_kw("repeat"):
             return self.repeat_stmt()
 
-        # Assignment and expression statements can both begin with identifiers.
-        # One-token lookahead resolves this ambiguity before consuming anything.
+        # Assignment and variable expressions both begin with IDENT, so one
+        # token of lookahead resolves the ambiguity without consuming input.
         if self.check("IDENT") and self._looks_like_assign():
             name = self.advance().lexeme
             self.consume("EQUAL", "Expected '=' in assignment")
-            expr = self.expression()
-            return A.AssignStmt(name, expr)
+            return A.AssignStmt(name, self.expression())
 
-        # Expressions used as standalone statements are wrapped in ExprStmt so
-        # the AST preserves the distinction between expressions and statements.
-        expr = self.expression()
-        return A.ExprStmt(expr)
+        return A.ExprStmt(self.expression())
 
     def _looks_like_assign(self) -> bool:
-        """
-        Use one-token lookahead to identify assignment syntax.
-
-        An assignment must begin with an IDENT token immediately followed by an
-        EQUAL token. This check does not consume either token, allowing the
-        statement parser to choose the correct grammar rule safely.
-        """
+        """Return True when IDENT is immediately followed by EQUAL."""
         if self.i + 1 >= len(self.tokens):
             return False
 
-        t0 = self.tokens[self.i]
-        t1 = self.tokens[self.i + 1]
-
-        return t0.kind == "IDENT" and t1.kind == "EQUAL"
+        current = self.tokens[self.i]
+        following = self.tokens[self.i + 1]
+        return (
+            current.kind == "IDENT"
+            and following.kind == "EQUAL"
+        )
 
     def if_stmt(self):
         """
-        Parse an if statement with an optional else branch.
+        Parse an if/else/end structure.
 
-        Expected structure:
-
-            if <condition> then
-                <then statements>
-            else
-                <else statements>
-            end
-
-        The caller has already consumed the initial `if` keyword.
+        The initial 'if' keyword has already been consumed by statement().
         """
-        cond = self.expression()
-
-        # `then` marks the end of the condition and a newline marks the start
-        # of the statement block.
+        condition = self.expression()
         self.consume(
             "KW",
             "Expected 'then' after if condition",
-            "then"
+            "then",
         )
         self.consume(
             "NEWLINE",
-            "Expected newline after then"
+            "Expected newline after 'then'",
         )
 
-        # The first branch ends when either `else` or `end` is encountered.
-        # Those terminating keywords are deliberately left unconsumed.
         then_body = self.block_until({"else", "end"})
-
-        # The else branch is optional. None is retained when the source contains
-        # no else clause, allowing the AST to represent that distinction.
         else_body = None
+
         if self.match_kw("else"):
             self.consume(
                 "NEWLINE",
-                "Expected newline after else"
+                "Expected newline after 'else'",
             )
             else_body = self.block_until({"end"})
 
-        # Every if statement requires one final `end`, regardless of whether an
-        # else branch was present.
         self.consume(
             "KW",
-            "Expected 'end' to close if",
-            "end"
+            "Expected 'end' to close if statement",
+            "end",
         )
-
-        return A.IfStmt(cond, then_body, else_body)
+        return A.IfStmt(condition, then_body, else_body)
 
     def while_stmt(self):
-        """
-        Parse a condition-controlled while loop.
-
-        Expected structure:
-
-            while <condition> do
-                <body statements>
-            end
-
-        The loop condition is represented as an expression AST node, while the
-        body is stored as an ordered list of statement nodes.
-        """
-        cond = self.expression()
-
+        """Parse a condition-controlled while loop."""
+        condition = self.expression()
         self.consume(
             "KW",
             "Expected 'do' after while condition",
-            "do"
+            "do",
         )
         self.consume(
             "NEWLINE",
-            "Expected newline after do"
+            "Expected newline after 'do'",
         )
 
         body = self.block_until({"end"})
-
         self.consume(
             "KW",
-            "Expected 'end' to close while",
-            "end"
+            "Expected 'end' to close while loop",
+            "end",
         )
-
-        return A.WhileStmt(cond, body)
+        return A.WhileStmt(condition, body)
 
     def repeat_stmt(self):
-        """
-        Parse a count-controlled repeat loop.
-
-        Expected structure:
-
-            repeat <count expression> times
-                <body statements>
-            end
-
-        The repeat count is parsed as a general expression rather than only a
-        number literal, permitting variables, arithmetic, or function calls.
-        """
-        count_expr = self.expression()
-
+        """Parse a count-controlled repeat loop."""
+        count = self.expression()
         self.consume(
             "KW",
             "Expected 'times' after repeat count",
-            "times"
+            "times",
         )
         self.consume(
             "NEWLINE",
-            "Expected newline after times"
+            "Expected newline after 'times'",
         )
 
         body = self.block_until({"end"})
-
         self.consume(
             "KW",
-            "Expected 'end' to close repeat",
-            "end"
+            "Expected 'end' to close repeat loop",
+            "end",
         )
-
-        return A.RepeatStmt(count_expr, body)
+        return A.RepeatStmt(count, body)
 
     def block_until(self, end_keywords: set[str]):
         """
-        Parse statements until one of the supplied terminating keywords appears.
+        Parse statements until a matching block terminator is reached.
 
-        The terminating keyword is not consumed here because the owning parser,
-        such as `if_stmt` or `while_stmt`, must validate and consume it. This
-        separation allows the same block parser to support different constructs.
+        The terminator is left unconsumed so the owning statement parser can
+        validate whether 'else' or 'end' is legal in that position.
         """
-        stmts = []
-
-        # Blank lines immediately inside a block are permitted.
+        statements = []
         self.skip_newlines()
 
-        while (
-            not self.at_end()
-            and not (
+        while not self.at_end():
+            if (
                 self.check("KW")
                 and self.peek().lexeme in end_keywords
-            )
-        ):
-            stmts.append(self.statement())
+            ):
+                break
+
+            statements.append(self.statement())
             self.skip_newlines()
 
-        return stmts
+        return statements
 
-    # -------------------------------------------------------------------------
-    # Expression parsing
-    # -------------------------------------------------------------------------
-    #
-    # The following methods implement operator precedence through recursive
-    # descent. Each method parses operators at one precedence level and delegates
-    # operands to the next-higher precedence level.
-    #
-    # Lowest precedence:
-    #   or
-    #   and
-    #   == !=
-    #   < <= > >=
-    #   + -
-    #   * /
-    #   unary not and unary -
-    #   calls
-    #   primary expressions
-    # Highest precedence:
-    # -------------------------------------------------------------------------
+    # Expression grammar, ordered from lowest to highest precedence.
 
     def expression(self):
-        """
-        Parse a complete expression.
-
-        `logic_or` is the entry point because logical OR has the lowest
-        precedence and can therefore contain every higher-precedence expression.
-        """
         return self.logic_or()
 
     def logic_or(self):
-        """
-        Parse left-associative logical OR expressions.
-
-        Repeated operators are folded into nested Binary nodes. For example,
-        `a or b or c` becomes `Binary(Binary(a, "or", b), "or", c)`.
-        """
-        expr = self.logic_and()
+        expression = self.logic_and()
 
         while self.match_kw("or"):
             right = self.logic_and()
-            expr = A.Binary(expr, "or", right)
+            expression = A.Binary(expression, "or", right)
 
-        return expr
+        return expression
 
     def logic_and(self):
-        """
-        Parse left-associative logical AND expressions.
-
-        Each operand is parsed through `equality`, giving equality operators
-        higher precedence than logical AND.
-        """
-        expr = self.equality()
+        expression = self.equality()
 
         while self.match_kw("and"):
             right = self.equality()
-            expr = A.Binary(expr, "and", right)
+            expression = A.Binary(expression, "and", right)
 
-        return expr
+        return expression
 
     def equality(self):
-        """
-        Parse equality and inequality operations.
-
-        Both operators have equal precedence and are processed from left to
-        right. Their operands are comparison expressions.
-        """
-        expr = self.compare()
+        expression = self.compare()
 
         while True:
             if self.match("EQEQ"):
-                op = "=="
+                operator = "=="
             elif self.match("NOTEQ"):
-                op = "!="
+                operator = "!="
             else:
                 break
 
             right = self.compare()
-            expr = A.Binary(expr, op, right)
+            expression = A.Binary(expression, operator, right)
 
-        return expr
+        return expression
 
     def compare(self):
-        """
-        Parse relational comparison operations.
-
-        Comparison operators bind more tightly than equality operators but less
-        tightly than arithmetic addition and subtraction.
-        """
-        expr = self.term()
+        expression = self.term()
 
         while True:
             if self.match("LT"):
-                op = "<"
+                operator = "<"
             elif self.match("LTE"):
-                op = "<="
+                operator = "<="
             elif self.match("GT"):
-                op = ">"
+                operator = ">"
             elif self.match("GTE"):
-                op = ">="
+                operator = ">="
             else:
                 break
 
             right = self.term()
-            expr = A.Binary(expr, op, right)
+            expression = A.Binary(expression, operator, right)
 
-        return expr
+        return expression
 
     def term(self):
-        """
-        Parse addition and subtraction.
-
-        The method name `term` represents the grammar level containing additive
-        operations. Multiplication and division are delegated to `factor`, which
-        gives those operations higher precedence.
-        """
-        expr = self.factor()
+        expression = self.factor()
 
         while True:
             if self.match("PLUS"):
-                op = "+"
+                operator = "+"
             elif self.match("MINUS"):
-                op = "-"
+                operator = "-"
             else:
                 break
 
             right = self.factor()
-            expr = A.Binary(expr, op, right)
+            expression = A.Binary(expression, operator, right)
 
-        return expr
+        return expression
 
     def factor(self):
-        """
-        Parse multiplication and division.
-
-        Operands are parsed through `unary`, ensuring unary operators are applied
-        before multiplicative operations.
-        """
-        expr = self.unary()
+        expression = self.unary()
 
         while True:
             if self.match("STAR"):
-                op = "*"
+                operator = "*"
             elif self.match("SLASH"):
-                op = "/"
+                operator = "/"
             else:
                 break
 
             right = self.unary()
-            expr = A.Binary(expr, op, right)
+            expression = A.Binary(expression, operator, right)
 
-        return expr
+        return expression
 
     def unary(self):
-        """
-        Parse prefix unary operators.
-
-        Recursively calling `unary` for the operand permits chained prefix
-        operators such as `not not value` or `--value`. If no unary operator is
-        present, parsing proceeds to function-call syntax.
-        """
+        # Recursion allows chained prefixes such as not not value or --value.
         if self.match_kw("not"):
             return A.Unary("not", self.unary())
 
@@ -547,75 +357,39 @@ class Parser:
         return self.call()
 
     def call(self):
-        """
-        Parse function-call expressions following a primary expression.
+        """Parse a primary expression followed by zero or more call suffixes."""
+        expression = self.primary()
 
-        Calls are parsed in a loop so that chained call syntax can be represented
-        if the language permits a call result to be called again. Arguments are
-        comma-separated expressions and may themselves contain any supported
-        operator or nested function call.
-        """
-        expr = self.primary()
+        while self.match("LPAREN"):
+            arguments = []
 
-        while True:
-            if self.match("LPAREN"):
-                args = []
+            if not self.check("RPAREN"):
+                arguments.append(self.expression())
 
-                # An immediate closing parenthesis represents an empty argument
-                # list. Otherwise, at least one expression must be parsed.
-                if not self.check("RPAREN"):
-                    args.append(self.expression())
+                while self.match("COMMA"):
+                    arguments.append(self.expression())
 
-                    # Each comma requires another complete argument expression.
-                    while self.match("COMMA"):
-                        args.append(self.expression())
+            self.consume(
+                "RPAREN",
+                "Expected ')' after arguments",
+            )
+            expression = A.Call(expression, arguments)
 
-                self.consume(
-                    "RPAREN",
-                    "Expected ')' after arguments"
-                )
-
-                # The previously parsed expression becomes the callee, and the
-                # collected expression nodes become its ordered arguments.
-                expr = A.Call(expr, args)
-                continue
-
-            break
-
-        return expr
+        return expression
 
     def primary(self):
-        """
-        Parse atomic expressions that cannot be divided into smaller operators.
-
-        Primary expressions include literals, variable references, language
-        constants, and parenthesised expressions. This is the highest-precedence
-        level of the expression grammar.
-        """
-
-        # Numeric token lexemes are converted to Python numeric values before
-        # being stored in the AST. A decimal point distinguishes floats from
-        # integers.
+        """Parse literals, variables, constants and grouped expressions."""
         if self.match("NUMBER"):
             raw = self.prev().lexeme
+            value = float(raw) if "." in raw else int(raw)
+            return A.Number(value)
 
-            if "." in raw:
-                return A.Number(float(raw))
-
-            return A.Number(int(raw))
-
-        # The lexer is responsible for producing the STRING token's lexeme in
-        # the format expected by the AST String node.
         if self.match("STRING"):
             return A.String(self.prev().lexeme)
 
-        # Identifiers become variable-reference nodes. Whether the variable
-        # exists is a later semantic or runtime concern, not a parsing concern.
         if self.match("IDENT"):
             return A.Var(self.prev().lexeme)
 
-        # Boolean and null values are keywords rather than generic identifiers,
-        # so they are converted directly into their dedicated literal AST nodes.
         if self.match_kw("true"):
             return A.Bool(True)
 
@@ -625,21 +399,16 @@ class Parser:
         if self.match_kw("null"):
             return A.Null()
 
-        # Parentheses override normal precedence by recursively parsing a full
-        # expression before requiring the matching closing parenthesis.
         if self.match("LPAREN"):
-            expr = self.expression()
+            expression = self.expression()
             self.consume(
                 "RPAREN",
-                "Expected ')' after expression"
+                "Expected ')' after expression",
             )
-            return expr
+            return expression
 
-        # Reaching this point means no valid primary expression begins with the
-        # current token. Source coordinates and token details make the resulting
-        # parser error directly traceable to the input program.
-        t = self.peek()
+        token = self.peek()
         raise ParseError(
-            f"Expected expression at {t.line}:{t.col} "
-            f"(got {t.kind}:{t.lexeme!r})"
+            f"Expected expression at {token.line}:{token.col} "
+            f"(got {token.kind}:{token.lexeme!r})"
         )
